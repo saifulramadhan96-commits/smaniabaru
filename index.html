@@ -168,7 +168,7 @@
           </div>
         </div>
 
-        <div id="login-error" class="hidden p-4 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100 items-center shadow-sm">
+        <div id="login-error" class="hidden p-4 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100 flex items-start shadow-sm">
           <i class="ph ph-warning-circle text-2xl mr-3 flex-shrink-0 mt-0.5"></i> 
           <span id="login-error-text" class="leading-tight block"></span>
         </div>
@@ -459,7 +459,8 @@
 
     // --- KONFIGURASI FIREBASE ---
     // WAJIB DIGANTI JIKA DI-HOSTING DI GITHUB: Masukkan data dari Firebase Console Anda
-    const firebaseConfig = typeof __firebase_config !== 'undefined' 
+    const isCanvasEnv = typeof __firebase_config !== 'undefined';
+    const firebaseConfig = isCanvasEnv
       ? JSON.parse(__firebase_config) 
       : {
           apiKey: "AIzaSyB3NtkLc11o1Gw9Otx1Q6ICla_fyGogk-w",
@@ -479,6 +480,14 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+
+    // Dapatkan Referensi Koleksi Berdasarkan Lingkungan
+    // Jika di GitHub, langsung simpan ke koleksi 'grades'. Jika di Canvas, ikuti struktur spesifiknya.
+    const getGradesCollection = () => {
+      return isCanvasEnv 
+        ? collection(db, 'artifacts', appId, 'public', 'data', 'grades')
+        : collection(db, 'grades');
+    };
 
     // Google Apps Script Webhook URL
     const GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxwBsTcs6e50B7jUMmMIoMBSF5B37YOJo6hnMNua1SUHsQi6jplRWVkpV_Phew6-mM/exec";
@@ -671,17 +680,7 @@
       el.fMapel.innerHTML = subOpts;
       el.fGuru.innerHTML = guruOpts;
 
-      // Cek apakah API Key Firebase yang sesungguhnya sudah dimasukkan
-      if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "ISI_API_KEY_FIREBASE_ANDA" || firebaseConfig.apiKey === "API_KEY_ANDA") {
-        el.loginErr.classList.remove('hidden');
-        el.loginErr.classList.replace('flex', 'flex'); // Ensure it acts as a flexbox 
-        el.loginErrTxt.innerHTML = "<b>Database Cloud Belum Dikonfigurasi!</b><br>Agar data tersimpan & sinkron antar perangkat saat di-host di GitHub, buka file <code>index.html</code> ini dan masukkan konfigurasi Firebase Anda di baris konfigurasi.";
-        el.btnLoginSubmit.disabled = true;
-        el.btnLoginSubmit.classList.add('opacity-50', 'cursor-not-allowed');
-        return; // Menghentikan inisialisasi aplikasi sepenuhnya jika konfigurasi tidak valid
-      }
-
-      // Firebase Auth dengan konfigurasi asli
+      // Firebase Auth Cerdas
       const doAuth = async () => {
         try {
           if (initialToken) await signInWithCustomToken(auth, initialToken);
@@ -689,7 +688,11 @@
         } catch (e) { 
           console.error("Auth Err", e);
           el.loginErr.classList.remove('hidden');
-          el.loginErrTxt.innerHTML = "<b>Kesalahan Otentikasi Database:</b><br>" + e.message;
+          el.loginErr.classList.replace('flex', 'flex'); 
+          // Pesan Error yang sangat jelas jika tidak bisa connect Firebase di Github
+          el.loginErrTxt.innerHTML = `<b>Akses Database Firebase Ditolak!</b><br>Jika Anda menjalankan ini di GitHub, Anda <b>Wajib</b>:<br>1. Mengaktifkan fitur <b>Anonymous</b> di menu Authentication Firebase.<br>2. Menambahkan domain GitHub Pages Anda ke bagian <b>Authorized Domains</b> di setelan Authentication Firebase.<br><span class="text-xs text-gray-500 mt-1 block">Detail: ${e.message}</span>`;
+          el.btnLoginSubmit.disabled = true;
+          el.btnLoginSubmit.classList.add('opacity-50', 'cursor-not-allowed');
         }
       };
       doAuth();
@@ -840,7 +843,7 @@
     function setupFirestoreListener() {
       if(unsubGrades) unsubGrades();
       
-      const q = collection(db, 'artifacts', appId, 'public', 'data', 'grades');
+      const q = getGradesCollection();
       unsubGrades = onSnapshot(q, snap => {
         let d = snapshotToData(snap);
         d.sort((a,b) => (a.createdAt?.seconds||0) - (b.createdAt?.seconds||0));
@@ -849,6 +852,7 @@
         if(activeMenu === 'nilai') renderTable();
       }, err => {
         console.error("Gagal memuat data:", err);
+        showToast("Gagal memuat data. Pastikan Aturan Firestore dalam mode Uji Coba (Test Mode).", "error");
       });
     }
     
@@ -1045,7 +1049,7 @@
 
       try {
         // Mode Firebase normal
-        const cRef = collection(db, 'artifacts', appId, 'public', 'data', 'grades');
+        const cRef = getGradesCollection();
         if(editGradeId) {
           payload.updatedAt = serverTimestamp();
           await updateDoc(doc(cRef, editGradeId), payload);
@@ -1112,7 +1116,7 @@
         try {
           const fp = {...p, updatedAt: serverTimestamp()};
           delete fp.studentName; delete fp.nisn; delete fp.subject; delete fp.className; // don't update immutable
-          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'grades', id), fp);
+          await updateDoc(doc(getGradesCollection(), id), fp);
           
           sendToGS(p).catch(e=>console.warn(e));
         } catch(err) { showToast("Gagal auto-save", 'error'); }
@@ -1146,7 +1150,7 @@
     async function confirmDelete() {
       if(!currentDeleteId) return;
       try {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'grades', currentDeleteId));
+        await deleteDoc(doc(getGradesCollection(), currentDeleteId));
         showToast("Dihapus", 'success');
       } catch(e) { showToast("Gagal hapus", 'error'); }
       el.deleteModal.classList.add('hidden');
@@ -1167,7 +1171,7 @@
       
       el.btnDeleteClass.disabled = true; el.btnDeleteClass.textContent = "Menghapus...";
       try {
-        await Promise.all(docs.map(d => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'grades', d.id))));
+        await Promise.all(docs.map(d => deleteDoc(doc(getGradesCollection(), d.id))));
         showToast(`${docs.length} data dihapus.`, "success");
         el.deleteClassSel.value = "";
       } catch(e) { showToast("Gagal hapus", "error"); }
@@ -1198,7 +1202,7 @@
                createdAt: serverTimestamp() 
              };
              try{ 
-               await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'grades'), p); 
+               await addDoc(getGradesCollection(), p); 
              } catch(err){}
           }
           c++;
