@@ -545,6 +545,7 @@
     // --- GLOBALS ---
     let appUser = null;
     let firebaseUser = null;
+    let isLocalMode = false; // Mode Fallback jika Firebase Gagal
     let gradesData = [];
     let unsubGrades = null;
     let activeMenu = 'dashboard';
@@ -678,20 +679,27 @@
       el.fMapel.innerHTML = subOpts;
       el.fGuru.innerHTML = guruOpts;
 
-      // Firebase Auth
+      // Firebase Auth dengan Fallback Mode Lokal
       const doAuth = async () => {
         try {
+          if (firebaseConfig.apiKey === "API_KEY_ANDA" || !firebaseConfig.apiKey) {
+            throw new Error("Invalid API Key");
+          }
           if (initialToken) await signInWithCustomToken(auth, initialToken);
           else await signInAnonymously(auth);
         } catch (e) { 
-          console.error("Auth Err", e); 
+          console.warn("Firebase tidak diatur. Beralih ke Mode Penyimpanan Lokal (Data dikirim ke Google Sheets saja).");
+          isLocalMode = true;
+          // Trigger render jika appUser sudah di-set (tapi biasanya appUser diset setelah form login)
         }
       };
       doAuth();
 
       onAuthStateChanged(auth, user => {
-        firebaseUser = user;
-        if(user && appUser) setupFirestoreListener();
+        if (!isLocalMode) {
+          firebaseUser = user;
+          if(user && appUser) setupFirestoreListener();
+        }
       });
 
       attachEvents();
@@ -819,8 +827,8 @@
     // --- GOOGLE SHEETS SYNC ---
     async function sendToGS(payload) {
       if (!GAS_WEBHOOK_URL || GAS_WEBHOOK_URL === "URL_WEBHOOK_APPS_SCRIPT_ANDA_DISINI" || GAS_WEBHOOK_URL === "") {
-        console.warn("Peringatan: URL Webhook Apps Script belum diisi. Simpan hanya ke Firestore.");
-        return; // Mencegah error pop-up di layar jika URL tidak ada, aplikasi tetap berjalan lancar.
+        console.warn("Peringatan: URL Webhook Apps Script belum diisi.");
+        return; 
       }
       try {
         const res = await fetch(GAS_WEBHOOK_URL, {
@@ -832,11 +840,27 @@
       }
     }
 
-    // --- FIRESTORE ---
+    // --- DATABASE MANAGEMENT ---
+    function setupLocalListener() {
+      const localData = localStorage.getItem('sipintar_grades');
+      if (localData) {
+        gradesData = JSON.parse(localData);
+        gradesData.sort((a,b) => (a.createdAt?.seconds||0) - (b.createdAt?.seconds||0));
+      } else {
+        gradesData = [];
+      }
+      updateStats();
+      if(activeMenu === 'nilai') renderTable();
+    }
+
+    function saveLocalData() {
+      localStorage.setItem('sipintar_grades', JSON.stringify(gradesData));
+      updateStats();
+      if(activeMenu === 'nilai') renderTable();
+    }
+
     function setupFirestoreListener() {
       if(unsubGrades) unsubGrades();
-      
-      // Jika Anda mem-publishnya di GitHub, pastikan "appId" dan "collection path" disesuaikan
       const q = collection(db, 'artifacts', appId, 'public', 'data', 'grades');
       unsubGrades = onSnapshot(q, snap => {
         let d = snapshotToData(snap);
@@ -936,7 +960,13 @@
         document.querySelectorAll('.guru-col').forEach(c=>c.classList.remove('hidden'));
       }
 
-      if(firebaseUser) setupFirestoreListener();
+      // Mulai Database Listener berdasarkan mode
+      if (isLocalMode) {
+        setupLocalListener();
+      } else if (firebaseUser) {
+        setupFirestoreListener();
+      }
+
       switchMenu('dashboard');
     }
 
@@ -1017,7 +1047,7 @@
 
     async function handleSaveNew(e) {
       e.preventDefault();
-      if (!appUser || !firebaseUser) return;
+      if (!appUser) return;
       let tot = parseFloat(weights.f) + parseFloat(weights.t) + parseFloat(weights.a);
       if(Math.abs(tot - 100) > 0.1) { showToast(`Total bobot harus 100% (${tot}%)`, 'error'); return; }
 
@@ -1039,17 +1069,37 @@
       };
 
       try {
-        const cRef = collection(db, 'artifacts', appId, 'public', 'data', 'grades');
-        if(editGradeId) {
-          payload.updatedAt = serverTimestamp();
-          await updateDoc(doc(cRef, editGradeId), payload);
-          showToast("Berhasil diperbarui");
-          editGradeId = null;
+        if (isLocalMode) {
+          if (editGradeId) {
+            const idx = gradesData.findIndex(g => g.id === editGradeId);
+            if (idx !== -1) {
+               gradesData[idx] = {...gradesData[idx], ...payload, id: editGradeId, updatedAt: new Date().toISOString()};
+               showToast("Berhasil diperbarui");
+            }
+            editGradeId = null;
+          } else {
+            payload.id = 'local_' + Date.now().toString();
+            payload.createdAt = { seconds: Math.floor(Date.now() / 1000) };
+            gradesData.push(payload);
+            showToast("Berhasil ditambah (Mode Lokal)");
+          }
+          saveLocalData();
         } else {
-          payload.createdAt = serverTimestamp();
-          await addDoc(cRef, payload);
-          showToast("Berhasil ditambah");
+          // Mode Firebase normal
+          const cRef = collection(db, 'artifacts', appId, 'public', 'data', 'grades');
+          if(editGradeId) {
+            payload.updatedAt = serverTimestamp();
+            await updateDoc(doc(cRef, editGradeId), payload);
+            showToast("Berhasil diperbarui");
+            editGradeId = null;
+          } else {
+            payload.createdAt = serverTimestamp();
+            await addDoc(cRef, payload);
+            showToast("Berhasil ditambah");
+          }
         }
+
+        // SELALU KIRIM KE SPREADSHEET
         sendToGS(payload).catch(e=>console.warn(e));
         resetForm();
       } catch (err) { showToast("Gagal menyimpan", 'error'); console.error(err); }
@@ -1102,9 +1152,17 @@
         };
 
         try {
-          const fp = {...p, updatedAt: serverTimestamp()};
-          delete fp.studentName; delete fp.nisn; delete fp.subject; delete fp.className; // don't update immutable
-          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'grades', id), fp);
+          if (isLocalMode) {
+             const idx = gradesData.findIndex(g=>g.id===id);
+             if(idx !== -1) {
+                gradesData[idx] = {...gradesData[idx], ...p, updatedAt: new Date().toISOString()};
+                saveLocalData();
+             }
+          } else {
+            const fp = {...p, updatedAt: serverTimestamp()};
+            delete fp.studentName; delete fp.nisn; delete fp.subject; delete fp.className; // don't update immutable
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'grades', id), fp);
+          }
           sendToGS(p).catch(e=>console.warn(e));
         } catch(err) { showToast("Gagal auto-save", 'error'); }
       }
@@ -1137,7 +1195,12 @@
     async function confirmDelete() {
       if(!currentDeleteId) return;
       try {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'grades', currentDeleteId));
+        if (isLocalMode) {
+          gradesData = gradesData.filter(g => g.id !== currentDeleteId);
+          saveLocalData();
+        } else {
+          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'grades', currentDeleteId));
+        }
         showToast("Dihapus", 'success');
       } catch(e) { showToast("Gagal hapus", 'error'); }
       el.deleteModal.classList.add('hidden');
@@ -1158,7 +1221,12 @@
       
       el.btnDeleteClass.disabled = true; el.btnDeleteClass.textContent = "Menghapus...";
       try {
-        await Promise.all(docs.map(d => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'grades', d.id))));
+        if (isLocalMode) {
+           gradesData = gradesData.filter(g => !(g.className===cls && g.tahun===activeTahun && g.semester===activeSemester));
+           saveLocalData();
+        } else {
+           await Promise.all(docs.map(d => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'grades', d.id))));
+        }
         showToast(`${docs.length} data dihapus.`, "success");
         el.deleteClassSel.value = "";
       } catch(e) { showToast("Gagal hapus", "error"); }
@@ -1186,12 +1254,20 @@
                semester: activeSemester, 
                scores: { f1:null, f2:null, f3:null, t1:null, t2:null, t3:null, asaj:null }, 
                results: { avgFormative:0, avgTask:0, final:0 }, 
-               createdAt: serverTimestamp() 
+               createdAt: isLocalMode ? {seconds: Math.floor(Date.now()/1000)} : serverTimestamp() 
              };
-             try{ await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'grades'), p); } catch(err){}
+             try{ 
+               if (isLocalMode) {
+                 p.id = 'local_' + Date.now().toString() + Math.random();
+                 gradesData.push(p);
+               } else {
+                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'grades'), p); 
+               }
+             } catch(err){}
           }
           c++;
         }
+        if (isLocalMode) saveLocalData();
         showToast(`Impor ${c} siswa selesai!`); e.target.value=null;
       };
       reader.readAsText(file);
