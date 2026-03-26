@@ -88,7 +88,7 @@
         </table>
         <table class="w-full text-left">
           <tbody>
-            <tr><td class="w-32 font-bold py-1">Tanggal</td><td class="w-4">:</td><td id="prev-tanggal"></td></tr>
+            <tr><td class="w-32 font-bold py-1">Periode</td><td class="w-4">:</td><td id="prev-periode"></td></tr>
             <tr><td class="font-bold py-1">Bobot Nilai</td><td>:</td><td id="prev-bobot"></td></tr>
           </tbody>
         </table>
@@ -137,6 +137,34 @@
             <i class="ph ph-lock absolute left-4 top-3.5 text-gray-400 text-xl group-focus-within:text-blue-600 transition-colors"></i>
             <input type="password" id="login-password" placeholder="••••••••" required class="w-full pl-12 pr-12 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none focus:border-blue-500 transition-all font-medium">
             <button type="button" id="toggle-password" class="absolute right-4 top-3.5 text-gray-400 hover:text-blue-600 transition-colors focus:outline-none text-xl"><i class="ph ph-eye"></i></button>
+          </div>
+        </div>
+
+        <!-- Tahun Pelajaran & Semester -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="space-y-2">
+            <label class="text-sm font-bold text-gray-700 ml-1">Tahun Pelajaran</label>
+            <div class="relative group">
+              <i class="ph ph-calendar-blank absolute left-4 top-3.5 text-gray-400 text-xl group-focus-within:text-blue-600 transition-colors"></i>
+              <select id="login-tahun" required class="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none focus:border-blue-500 transition-all font-medium appearance-none">
+                <option value="" disabled selected>Pilih...</option>
+                <option value="2024/2025">2024/2025</option>
+                <option value="2025/2026">2025/2026</option>
+                <option value="2026/2027">2026/2027</option>
+                <option value="2027/2028">2027/2028</option>
+              </select>
+            </div>
+          </div>
+          <div class="space-y-2">
+            <label class="text-sm font-bold text-gray-700 ml-1">Semester</label>
+            <div class="relative group">
+              <i class="ph ph-books absolute left-4 top-3.5 text-gray-400 text-xl group-focus-within:text-blue-600 transition-colors"></i>
+              <select id="login-semester" required class="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none focus:border-blue-500 transition-all font-medium appearance-none">
+                <option value="" disabled selected>Pilih...</option>
+                <option value="Ganjil">Ganjil</option>
+                <option value="Genap">Genap</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -200,6 +228,7 @@
         <div>
           <h1 id="page-title" class="text-3xl font-extrabold text-gray-800 flex items-center gap-3">Dashboard Utama</h1>
           <p class="text-gray-500 font-medium mt-1">Selamat datang kembali, <span id="page-subtitle-name" class="text-blue-700 font-bold"></span></p>
+          <div id="display-periode" class="mt-2 text-xs font-bold text-blue-800 bg-blue-100 px-3 py-1.5 rounded-full inline-block"></div>
         </div>
         <div class="hidden md:block text-right">
           <div id="current-date" class="text-sm font-bold text-gray-400 uppercase tracking-wide"></div>
@@ -291,7 +320,7 @@
             </div>
             <div class="bg-red-50 p-4 rounded-lg border border-red-100 text-red-800 text-sm flex items-start gap-3">
               <i class="ph ph-warning text-lg flex-shrink-0 mt-0.5"></i>
-              <p><strong>Peringatan:</strong> Tindakan ini tidak dapat dibatalkan. Semua data di kelas terpilih akan dihapus permanen.</p>
+              <p><strong>Peringatan:</strong> Tindakan ini tidak dapat dibatalkan. Semua data di kelas terpilih <b>pada tahun dan semester yang aktif saat ini</b> akan dihapus permanen.</p>
             </div>
             <button id="btn-delete-class" disabled class="w-full py-3 rounded-xl font-bold text-white shadow-lg transition-all bg-gray-300 cursor-not-allowed">Hapus Permanen Data Kelas</button>
           </div>
@@ -348,10 +377,6 @@
               <button id="btn-cancel-edit" class="text-xs text-red-600 hover:underline flex items-center gap-1 mr-2 hidden"><i class="ph ph-x"></i> Batal Edit</button>
               
               <!-- Guru Actions -->
-              <button id="btn-sync" class="hidden items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors shadow-sm bg-indigo-600 hover:bg-indigo-700 text-white">
-                <i class="ph ph-paper-plane-right"></i> <span id="btn-sync-text">Kirim ke Sheet</span>
-              </button>
-
               <div class="relative hidden" id="wrapper-import-guru">
                 <input type="file" id="import-csv-guru" accept=".csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
                 <button class="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm font-medium transition-colors shadow-sm pointer-events-none">
@@ -514,6 +539,10 @@
     let editGradeId = null;
     let isSyncing = false;
     let currentDeleteId = null;
+    
+    // Periode State
+    let activeTahun = '';
+    let activeSemester = '';
 
     // Filter/Context state
     let wFilter = 'all';
@@ -528,6 +557,8 @@
       loginForm: document.getElementById('login-form'),
       loginUsername: document.getElementById('login-username'),
       loginPass: document.getElementById('login-password'),
+      loginTahun: document.getElementById('login-tahun'),
+      loginSemester: document.getElementById('login-semester'),
       loginErr: document.getElementById('login-error'),
       loginErrTxt: document.getElementById('login-error-text'),
       usersList: document.getElementById('users-list'),
@@ -543,6 +574,7 @@
       
       pageTitle: document.getElementById('page-title'),
       pageSubtitle: document.getElementById('page-subtitle-name'),
+      dispPeriode: document.getElementById('display-periode'),
       currentDate: document.getElementById('current-date'),
       
       secDash: document.getElementById('sec-dashboard'),
@@ -577,8 +609,6 @@
       badgeMapel: document.getElementById('badge-mapel'),
       badgeEdit: document.getElementById('badge-edit-mode'),
       btnCancelEdit: document.getElementById('btn-cancel-edit'),
-      btnSync: document.getElementById('btn-sync'),
-      btnSyncText: document.getElementById('btn-sync-text'),
       wrapImportGuru: document.getElementById('wrapper-import-guru'),
       importCsvGuru: document.getElementById('import-csv-guru'),
       btnShowPreview: document.getElementById('btn-show-preview'),
@@ -617,6 +647,7 @@
       pGuru: document.getElementById('prev-guru'),
       pTanggal: document.getElementById('prev-tanggal'),
       pBobot: document.getElementById('prev-bobot'),
+      pPeriode: document.getElementById('prev-periode'),
     };
 
     // --- INIT ---
@@ -668,6 +699,8 @@
         const u = USERS_DB.find(x => x.username === un && x.password === pw);
         if (u) {
           appUser = u;
+          activeTahun = el.loginTahun.value;
+          activeSemester = el.loginSemester.value;
           el.loginErr.classList.add('hidden');
           showApp();
         } else {
@@ -683,6 +716,10 @@
         resetForm();
         el.loginUsername.value = '';
         el.loginPass.value = '';
+        el.loginTahun.value = '';
+        el.loginSemester.value = '';
+        activeTahun = '';
+        activeSemester = '';
         el.mainView.classList.add('hidden');
         el.loginView.classList.remove('hidden');
       };
@@ -727,7 +764,6 @@
       el.btnShowPreview.onclick = () => showPreview(true);
       el.btnClosePreview.onclick = () => showPreview(false);
       el.btnPreviewDownload.onclick = handleDownloadDoc;
-      el.btnSync.onclick = handleSyncToSpreadsheet;
     }
 
     // --- UTILS ---
@@ -754,7 +790,8 @@
     function ds(v) { return (v===null||v===undefined||v==="") ? "" : v; } // display string
 
     const getFiltered = () => {
-      let d = gradesData;
+      // PENYARINGAN BERDASARKAN TAHUN PELAJARAN DAN SEMESTER
+      let d = gradesData.filter(g => g.tahun === activeTahun && g.semester === activeSemester);
       if(appUser.role === 'guru') d = d.filter(g => g.teacherName === appUser.username || g.teacherName === 'admin');
       if(selSubject) d = d.filter(g => g.subject === selSubject);
       if(selClass) d = d.filter(g => g.className === selClass);
@@ -792,7 +829,9 @@
     function snapshotToData(snap) { return snap.docs.map(doc => ({id: doc.id, ...doc.data()})); }
 
     function updateStats() {
-      let d = appUser.role==='guru' ? gradesData.filter(g=>g.teacherName===appUser.username || g.teacherName==='admin') : gradesData;
+      // Statistik juga hanya menampilkan data sesuai tahun dan semester yang aktif
+      let baseD = gradesData.filter(g => g.tahun === activeTahun && g.semester === activeSemester);
+      let d = appUser.role==='guru' ? baseD.filter(g=>g.teacherName===appUser.username || g.teacherName==='admin') : baseD;
       el.statStudents.textContent = d.length;
       let tot = d.reduce((a,c)=>a+(c.results?.final||0),0);
       el.statAvg.textContent = d.length ? (tot/d.length).toFixed(1) : "0.0";
@@ -840,6 +879,7 @@
       el.mainView.classList.remove('hidden');
       el.authName.textContent = appUser.username.split(',')[0];
       el.authRole.textContent = appUser.role;
+      el.dispPeriode.innerHTML = `<i class="ph ph-calendar-check"></i> TA. ${activeTahun} - Semester ${activeSemester}`;
 
       // Build Sidebar Nav
       let navHtml = `<button data-id="dashboard" class="nav-btn w-full flex items-center gap-4 px-5 py-3.5 rounded-xl transition-all duration-200 group text-blue-200 hover:bg-blue-800 hover:text-white" onclick="switchMenu('dashboard')"><i class="ph ph-house text-xl text-blue-400"></i><span>Dashboard</span></button>`;
@@ -857,9 +897,9 @@
 
       // Manual text
       let manHtml = '';
-      if(appUser.role==='admin') manHtml = `<ul class="space-y-3"><li class="flex gap-3"><i class="ph ph-gear text-blue-500 text-lg mt-0.5"></i><span><strong>Kelola Data Siswa (Import Massal):</strong> Pilih kelas, upload .csv (Nama Siswa, NISN). Sistem otomatis membagi ke 18 mapel.</span></li><li class="flex gap-3"><i class="ph ph-trash text-red-500 text-lg mt-0.5"></i><span><strong>Hapus Data Kelas:</strong> Reset data kelas permanen.</span></li></ul>`;
-      else if(appUser.role==='wakasek') manHtml = `<ul class="space-y-3"><li class="flex gap-3"><i class="ph ph-funnel text-blue-500 text-lg mt-0.5"></i><span><strong>Monitor & Filter:</strong> Gunakan filter untuk melihat rekap spesifik.</span></li><li class="flex gap-3"><i class="ph ph-eye text-emerald-500 text-lg mt-0.5"></i><span><strong>Preview & Cetak:</strong> Klik Preview & Download untuk mencetak laporan.</span></li></ul>`;
-      else manHtml = `<ul class="space-y-3"><li class="flex gap-3"><i class="ph ph-pencil-simple text-blue-500 text-lg mt-0.5"></i><span><strong>Mengisi Nilai:</strong> Pilih Mapel & Kelas. Ketik angka, data <b>otomatis tersimpan</b> saat pindah kolom.</span></li><li class="flex gap-3"><i class="ph ph-paper-plane-right text-indigo-500 text-lg mt-0.5"></i><span><strong>Kirim ke Sheet:</strong> Klik untuk menyinkronkan seluruh nilai kelas ke Google Spreadsheet.</span></li></ul>`;
+      if(appUser.role==='admin') manHtml = `<ul class="space-y-3"><li class="flex gap-3"><i class="ph ph-gear text-blue-500 text-lg mt-0.5"></i><span><strong>Kelola Data Siswa (Import Massal):</strong> Pilih kelas, upload .csv (Nama Siswa, NISN). Sistem otomatis membagi ke 18 mapel.</span></li><li class="flex gap-3"><i class="ph ph-trash text-red-500 text-lg mt-0.5"></i><span><strong>Hapus Data Kelas:</strong> Reset data kelas permanen pada periode aktif.</span></li></ul>`;
+      else if(appUser.role==='wakasek') manHtml = `<ul class="space-y-3"><li class="flex gap-3"><i class="ph ph-funnel text-blue-500 text-lg mt-0.5"></i><span><strong>Monitor & Filter:</strong> Gunakan filter untuk melihat rekap spesifik sesuai tahun & semester yang dipilih saat login.</span></li><li class="flex gap-3"><i class="ph ph-eye text-emerald-500 text-lg mt-0.5"></i><span><strong>Preview & Cetak:</strong> Klik Preview & Download untuk mencetak laporan.</span></li></ul>`;
+      else manHtml = `<ul class="space-y-3"><li class="flex gap-3"><i class="ph ph-pencil-simple text-blue-500 text-lg mt-0.5"></i><span><strong>Mengisi Nilai:</strong> Pilih Mapel & Kelas. Ketik angka, data <b>otomatis tersimpan</b> saat pindah kolom. Data akan terikat pada periode ${activeTahun} Semester ${activeSemester}.</span></li></ul>`;
       el.userManual.innerHTML = manHtml;
 
       // Adjust UI for Nilai
@@ -867,7 +907,6 @@
         el.fGuruWrap.classList.remove('hidden');
         el.weightsCont.classList.add('hidden');
         el.rowNewGrade.classList.add('hidden');
-        el.btnSync.classList.add('hidden');
         el.wrapImportGuru.classList.add('hidden');
         document.querySelectorAll('.guru-col').forEach(c=>c.classList.add('hidden'));
       } else {
@@ -896,7 +935,6 @@
       if(appUser.role==='guru') {
         el.weightsCont.classList.remove('hidden');
         if(!editGradeId) el.rowNewGrade.classList.remove('hidden');
-        el.btnSync.classList.remove('hidden');
         el.wrapImportGuru.classList.remove('hidden');
       }
 
@@ -963,7 +1001,20 @@
 
       const s = { f1:san(el.inF1.value), f2:san(el.inF2.value), f3:san(el.inF3.value), t1:san(el.inT1.value), t2:san(el.inT2.value), t3:san(el.inT3.value), asaj:san(el.inAsaj.value) };
       const c = getCalc(s);
-      const payload = { studentName: el.inName.value, nisn: el.inNisn.value, teacherName: appUser.username, subject: selSubject, className: selClass, scores: s, results: {avgFormative: parseFloat(c.avgFormative), avgTask:parseFloat(c.avgTask), final:parseFloat(c.final)}, weightsSnapshot: weights };
+      
+      // Tambahkan tahun dan semester ke dalam payload
+      const payload = { 
+        studentName: el.inName.value, 
+        nisn: el.inNisn.value, 
+        teacherName: appUser.username, 
+        subject: selSubject, 
+        className: selClass, 
+        tahun: activeTahun, 
+        semester: activeSemester,
+        scores: s, 
+        results: {avgFormative: parseFloat(c.avgFormative), avgTask:parseFloat(c.avgTask), final:parseFloat(c.final)}, 
+        weightsSnapshot: weights 
+      };
 
       try {
         const cRef = collection(db, 'artifacts', appId, 'public', 'data', 'grades');
@@ -985,16 +1036,23 @@
     function handleTableInput(e) {
       if(e.target.tagName === 'INPUT') {
         const tr = e.target.closest('tr');
+        if (tr.id === 'row-new-grade') return; // Di-handle oleh calcNew
         const id = tr.dataset.id;
         const inps = tr.querySelectorAll('input');
-        const s = { f1:inps[0].value, f2:inps[1].value, f3:inps[2].value, t1:inps[3].value, t2:inps[4].value, t3:inps[5].value, asaj:inps[6].value };
-        tr.querySelector('.cell-na').textContent = getCalc(s).final;
+        if (inps.length >= 7) {
+            const s = { f1:inps[0].value, f2:inps[1].value, f3:inps[2].value, t1:inps[3].value, t2:inps[4].value, t3:inps[5].value, asaj:inps[6].value };
+            const cellNa = tr.querySelector('.cell-na');
+            if (cellNa) {
+                cellNa.textContent = getCalc(s).final;
+            }
+        }
       }
     }
 
     async function handleTableBlur(e) {
       if(e.target.tagName === 'INPUT') {
         const tr = e.target.closest('tr');
+        if (tr.id === 'row-new-grade') return;
         const id = tr.dataset.id;
         const item = gradesData.find(g=>g.id===id);
         if(!item) return;
@@ -1007,7 +1065,19 @@
         const c = getCalc(ns);
         const tn = (item.teacherName==='admin' && appUser.role==='guru') ? appUser.username : item.teacherName;
         
-        const p = { studentName: item.studentName, nisn: item.nisn, subject: item.subject, className: item.className, teacherName: tn, scores: ns, results: {avgFormative: parseFloat(c.avgFormative), avgTask:parseFloat(c.avgTask), final:parseFloat(c.final)}, weightsSnapshot: weights };
+        // Pastikan properti tahun dan semester ikut diselipkan untuk keperluan pengiriman ke Spreadsheet (Webhook)
+        const p = { 
+          studentName: item.studentName, 
+          nisn: item.nisn, 
+          subject: item.subject, 
+          className: item.className, 
+          tahun: item.tahun || activeTahun, 
+          semester: item.semester || activeSemester, 
+          teacherName: tn, 
+          scores: ns, 
+          results: {avgFormative: parseFloat(c.avgFormative), avgTask:parseFloat(c.avgTask), final:parseFloat(c.final)}, 
+          weightsSnapshot: weights 
+        };
 
         try {
           const fp = {...p, updatedAt: serverTimestamp()};
@@ -1057,10 +1127,11 @@
     async function handleDeleteClassData() {
       const cls = el.deleteClassSel.value;
       if(!cls) return showToast("Pilih Kelas!", "error");
-      if(!window.confirm(`Yakin hapus SEMUA data ${cls}?`)) return;
+      if(!window.confirm(`Yakin hapus SEMUA data ${cls} pada periode ${activeTahun} - Semester ${activeSemester}?`)) return;
       if(!window.confirm(`Konfirmasi terakhir: Hapus permanen ${cls}?`)) return;
       
-      const docs = gradesData.filter(g=>g.className===cls);
+      // Filter penghapusan agar HANYA MENGHAPUS DI TAHUN & SEMESTER SAAT INI
+      const docs = gradesData.filter(g => g.className===cls && g.tahun===activeTahun && g.semester===activeSemester);
       if(!docs.length) return showToast("Tidak ada data.", "error");
       
       el.btnDeleteClass.disabled = true; el.btnDeleteClass.textContent = "Menghapus...";
@@ -1083,7 +1154,18 @@
           const cols=r.split(','); let n=cols[0]?.trim().replace(/^"|"$/g,''); let nis=cols[1]?.trim().replace(/^"|"$/g,'')||"";
           if(n.toLowerCase()==='nama siswa' || n.toLowerCase()==='nama' || !n) continue;
           for(const s of DEFAULT_SUBJECTS) {
-             const p = { studentName: n, nisn: nis, teacherName: 'admin', subject: s, className: cls, scores: { f1:null, f2:null, f3:null, t1:null, t2:null, t3:null, asaj:null }, results: { avgFormative:0, avgTask:0, final:0 }, createdAt: serverTimestamp() };
+             const p = { 
+               studentName: n, 
+               nisn: nis, 
+               teacherName: 'admin', 
+               subject: s, 
+               className: cls, 
+               tahun: activeTahun, 
+               semester: activeSemester, 
+               scores: { f1:null, f2:null, f3:null, t1:null, t2:null, t3:null, asaj:null }, 
+               results: { avgFormative:0, avgTask:0, final:0 }, 
+               createdAt: serverTimestamp() 
+             };
              try{ await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'grades'), p); } catch(err){}
           }
           c++;
@@ -1095,23 +1177,6 @@
     const handleImportAdmin = (e) => { const c = el.importClass.value; if(!c) { showToast("Pilih kelas", "error"); e.target.value=null; return; } doImport(e, c); };
     const handleImportGuru = (e) => { if(!selClass) { showToast("Pilih kelas", "error"); e.target.value=null; return; } doImport(e, selClass); };
 
-    async function handleSyncToSpreadsheet() {
-      const d = getDisplayData();
-      if(!d.length) return showToast("Tidak ada data", "error");
-      if(!window.confirm(`Kirim ${d.length} data ke Sheet?`)) return;
-      isSyncing = true; el.btnSync.classList.replace('bg-indigo-600', 'bg-gray-400'); el.btnSyncText.textContent = "Mengirim...";
-      let c=0;
-      try {
-        for(const it of d) {
-          const cal = getCalc(it.scores);
-          const p = { studentName: it.studentName, nisn: it.nisn, subject: it.subject, className: it.className, teacherName: it.teacherName, scores: {f1:san(it.scores.f1),f2:san(it.scores.f2),f3:san(it.scores.f3),t1:san(it.scores.t1),t2:san(it.scores.t2),t3:san(it.scores.t3),asaj:san(it.scores.asaj)}, results: {avgFormative:parseFloat(cal.avgFormative),avgTask:parseFloat(cal.avgTask),final:parseFloat(cal.final)}, weightsSnapshot: weights, updatedAt: new Date().toISOString() };
-          await sendToGS(p); c++;
-        }
-        showToast(`Terkirim ${c} data!`);
-      } catch(e) { showToast(e.message||"Gagal", "error"); }
-      isSyncing = false; el.btnSync.classList.replace('bg-gray-400', 'bg-indigo-600'); el.btnSyncText.textContent = "Kirim ke Sheet";
-    }
-
     function showPreview(show) {
       if(show) {
         const d = getDisplayData();
@@ -1120,6 +1185,7 @@
         el.pKelas.textContent = selClass || 'Semua Kelas';
         el.pGuru.textContent = appUser.role==='guru' ? appUser.username : (wFilter!=='all'?wFilter:'Semua Guru');
         el.pTanggal.textContent = new Date().toLocaleDateString('id-ID');
+        el.pPeriode.textContent = `${activeTahun} - Semester ${activeSemester}`;
         el.pBobot.textContent = `F: ${weights.f}% | T: ${weights.t}% | ASAJ: ${weights.a}%`;
         
         el.prevTbody.innerHTML = d.map((it, i) => `<tr><td class="border border-black p-2">${i+1}</td><td class="border border-black p-2 text-left"><b>${it.studentName}</b><br><span class="text-xs text-gray-600">${it.nisn||'-'}</span></td><td class="border border-black p-2">${ds(it.scores.f1)}</td><td class="border border-black p-2">${ds(it.scores.f2)}</td><td class="border border-black p-2">${ds(it.scores.f3)}</td><td class="border border-black p-2">${ds(it.scores.t1)}</td><td class="border border-black p-2">${ds(it.scores.t2)}</td><td class="border border-black p-2">${ds(it.scores.t3)}</td><td class="border border-black p-2">${ds(it.scores.asaj)}</td><td class="border border-black p-2 font-bold bg-gray-50">${getCalc(it.scores).final}</td></tr>`).join('');
@@ -1130,7 +1196,7 @@
     function handleDownloadDoc() {
       const rt = appUser.role==='guru' ? appUser.username : (wFilter!=='all'?wFilter:'Semua Guru');
       const rs = selSubject || 'Semua Mata Pelajaran'; const rc = selClass || 'Semua Kelas';
-      const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset="utf-8"><title>Rekap</title><style>body{font-family:'Times New Roman',serif;font-size:12pt}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid black;padding:5px;vertical-align:middle;font-size:10pt}th{background-color:#f0f0f0;font-weight:bold;text-align:center}.header{text-align:center;margin-bottom:20px}.meta-table{width:100%; margin-bottom:10px; border:none;} .meta-table td{border:none; padding:2px; text-align:left; font-size:11pt;}</style></head><body><div class="header"><h2>PEMERINTAH PROVINSI JAWA TIMUR</h2><h3>DINAS PENDIDIKAN</h3><h1>SMAN 1 AMBUNTEN</h1><p>Jl. Raya Ambunten, Sumenep - Jawa Timur</p><hr/><h2>LAPORAN REKAPITULASI NILAI</h2></div><table class="meta-table"><tr><td width="15%"><b>Mata Pelajaran</b></td><td width="2%">:</td><td>${rs}</td><td width="15%"><b>Tanggal</b></td><td width="2%">:</td><td>${new Date().toLocaleDateString('id-ID')}</td></tr><tr><td><b>Kelas</b></td><td>:</td><td>${rc}</td><td><b>Bobot</b></td><td>:</td><td>F:${weights.f}% T:${weights.t}% A:${weights.a}%</td></tr><tr><td><b>Guru Pengajar</b></td><td>:</td><td colspan="4">${rt}</td></tr></table><table><thead><tr><th>No</th><th>Nama Siswa & NISN</th><th>F1</th><th>F2</th><th>F3</th><th>T1</th><th>T2</th><th>T3</th><th>ASAJ</th><th>NA</th></tr></thead><tbody>${getDisplayData().map((it, i)=>`<tr><td style="text-align:center">${i+1}</td><td><b>${it.studentName}</b><br/>NISN: ${it.nisn||'-'}</td><td style="text-align:center">${ds(it.scores.f1)}</td><td style="text-align:center">${ds(it.scores.f2)}</td><td style="text-align:center">${ds(it.scores.f3)}</td><td style="text-align:center">${ds(it.scores.t1)}</td><td style="text-align:center">${ds(it.scores.t2)}</td><td style="text-align:center">${ds(it.scores.t3)}</td><td style="text-align:center">${ds(it.scores.asaj)}</td><td style="text-align:center"><b>${getCalc(it.scores).final}</b></td></tr>`).join('')}</tbody></table></body></html>`;
+      const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset="utf-8"><title>Rekap</title><style>body{font-family:'Times New Roman',serif;font-size:12pt}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid black;padding:5px;vertical-align:middle;font-size:10pt}th{background-color:#f0f0f0;font-weight:bold;text-align:center}.header{text-align:center;margin-bottom:20px}.meta-table{width:100%; margin-bottom:10px; border:none;} .meta-table td{border:none; padding:2px; text-align:left; font-size:11pt;}</style></head><body><div class="header"><h2>PEMERINTAH PROVINSI JAWA TIMUR</h2><h3>DINAS PENDIDIKAN</h3><h1>SMAN 1 AMBUNTEN</h1><p>Jl. Raya Ambunten, Sumenep - Jawa Timur</p><hr/><h2>LAPORAN REKAPITULASI NILAI</h2></div><table class="meta-table"><tr><td width="15%"><b>Mata Pelajaran</b></td><td width="2%">:</td><td>${rs}</td><td width="15%"><b>Tanggal</b></td><td width="2%">:</td><td>${new Date().toLocaleDateString('id-ID')}</td></tr><tr><td><b>Kelas</b></td><td>:</td><td>${rc}</td><td><b>Periode</b></td><td>:</td><td>${activeTahun} - Smt ${activeSemester}</td></tr><tr><td><b>Guru Pengajar</b></td><td>:</td><td colspan="4">${rt}</td></tr></table><table><thead><tr><th>No</th><th>Nama Siswa & NISN</th><th>F1</th><th>F2</th><th>F3</th><th>T1</th><th>T2</th><th>T3</th><th>ASAJ</th><th>NA</th></tr></thead><tbody>${getDisplayData().map((it, i)=>`<tr><td style="text-align:center">${i+1}</td><td><b>${it.studentName}</b><br/>NISN: ${it.nisn||'-'}</td><td style="text-align:center">${ds(it.scores.f1)}</td><td style="text-align:center">${ds(it.scores.f2)}</td><td style="text-align:center">${ds(it.scores.f3)}</td><td style="text-align:center">${ds(it.scores.t1)}</td><td style="text-align:center">${ds(it.scores.t2)}</td><td style="text-align:center">${ds(it.scores.t3)}</td><td style="text-align:center">${ds(it.scores.asaj)}</td><td style="text-align:center"><b>${getCalc(it.scores).final}</b></td></tr>`).join('')}</tbody></table></body></html>`;
       const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Rekap_Nilai_${new Date().toISOString().slice(0,10)}.doc`;
       a.click();
