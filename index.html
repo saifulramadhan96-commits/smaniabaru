@@ -464,9 +464,21 @@
     import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // --- CONFIG & CONSTANTS ---
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    // --- KONFIGURASI FIREBASE ---
+    // Gunakan konfigurasi bawaan lingkungan (jika ada), atau gunakan konfigurasi manual Anda untuk GitHub
+    const firebaseConfig = typeof __firebase_config !== 'undefined' 
+      ? JSON.parse(__firebase_config) 
+      : {
+          apiKey: "API_KEY_ANDA",
+          authDomain: "PROJECT_ID.firebaseapp.com",
+          projectId: "PROJECT_ID",
+          storageBucket: "PROJECT_ID.appspot.com",
+          messagingSenderId: "SENDER_ID",
+          appId: "APP_ID"
+        };
+
+    // --- KONFIGURASI APLIKASI ---
+    const appId = typeof __app_id !== 'undefined' ? __app_id : "sipintar-sman1ambunten"; // Identifier aplikasi
     const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
     
     // Inisialisasi Firebase
@@ -474,7 +486,7 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // Google Apps Script Webhook URL (GANTI JIKA PERLU)
+    // Google Apps Script Webhook URL
     const GAS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxwBsTcs6e50B7jUMmMIoMBSF5B37YOJo6hnMNua1SUHsQi6jplRWVkpV_Phew6-mM/exec";
 
     const USERS_DB = [
@@ -537,7 +549,6 @@
     let unsubGrades = null;
     let activeMenu = 'dashboard';
     let editGradeId = null;
-    let isSyncing = false;
     let currentDeleteId = null;
     
     // Periode State
@@ -672,7 +683,9 @@
         try {
           if (initialToken) await signInWithCustomToken(auth, initialToken);
           else await signInAnonymously(auth);
-        } catch (e) { console.error("Auth Err", e); }
+        } catch (e) { 
+          console.error("Auth Err", e); 
+        }
       };
       doAuth();
 
@@ -806,17 +819,24 @@
     // --- GOOGLE SHEETS SYNC ---
     async function sendToGS(payload) {
       if (!GAS_WEBHOOK_URL || GAS_WEBHOOK_URL === "URL_WEBHOOK_APPS_SCRIPT_ANDA_DISINI" || GAS_WEBHOOK_URL === "") {
-        throw new Error("URL Webhook Apps Script belum disetel.");
+        console.warn("Peringatan: URL Webhook Apps Script belum diisi. Simpan hanya ke Firestore.");
+        return; // Mencegah error pop-up di layar jika URL tidak ada, aplikasi tetap berjalan lancar.
       }
-      const res = await fetch(GAS_WEBHOOK_URL, {
-        method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload)
-      });
-      if(!res.ok) throw new Error("Network response was not ok");
+      try {
+        const res = await fetch(GAS_WEBHOOK_URL, {
+          method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload)
+        });
+        if(!res.ok) console.warn("Peringatan: Gagal terhubung ke Google Script");
+      } catch (err) {
+        console.warn("Peringatan: Terdapat kesalahan jaringan atau setelan CORS dari Apps Script saat mengirim data");
+      }
     }
 
     // --- FIRESTORE ---
     function setupFirestoreListener() {
       if(unsubGrades) unsubGrades();
+      
+      // Jika Anda mem-publishnya di GitHub, pastikan "appId" dan "collection path" disesuaikan
       const q = collection(db, 'artifacts', appId, 'public', 'data', 'grades');
       unsubGrades = onSnapshot(q, snap => {
         let d = snapshotToData(snap);
@@ -824,6 +844,8 @@
         gradesData = d;
         updateStats();
         if(activeMenu === 'nilai') renderTable();
+      }, err => {
+        console.error("Gagal memuat data:", err);
       });
     }
     function snapshotToData(snap) { return snap.docs.map(doc => ({id: doc.id, ...doc.data()})); }
