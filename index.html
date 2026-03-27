@@ -458,17 +458,18 @@
     import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // --- KONFIGURASI FIREBASE ---
-    // WAJIB DIGANTI JIKA DI-HOSTING DI GITHUB: Masukkan data dari Firebase Console Anda
+    // WAJIB DIGANTI: Masukkan konfigurasi Firebase Anda di bawah ini
     const isCanvasEnv = typeof __firebase_config !== 'undefined';
-    const firebaseConfig = {
-    apiKey: "AIzaSyD_rW1SrLEMxMPcdN124OVpouLk0wUJmaQ",
-    authDomain: "sipintar-ambunten.firebaseapp.com",
-    projectId: "sipintar-ambunten",
-    storageBucket: "sipintar-ambunten.firebasestorage.app",
-    messagingSenderId: "560048609348",
-    appId: "1:560048609348:web:2f71b21b38b7d6a2dcc411",
-    measurementId: "G-J1SLD3313Y"
-  };
+   const firebaseConfig = {
+  apiKey: "AIzaSyD_rW1SrLEMxMPcdN124OVpouLk0wUJmaQ",
+  authDomain: "sipintar-ambunten.firebaseapp.com",
+  projectId: "sipintar-ambunten",
+  storageBucket: "sipintar-ambunten.firebasestorage.app",
+  messagingSenderId: "560048609348",
+  appId: "1:560048609348:web:2f71b21b38b7d6a2dcc411",
+  measurementId: "G-J1SLD3313Y"
+};
+
 
     // --- KONFIGURASI APLIKASI ---
     const appId = typeof __app_id !== 'undefined' ? __app_id : "sipintar-sman1ambunten"; // Identifier aplikasi
@@ -549,7 +550,6 @@
     let unsubGrades = null;
     let activeMenu = 'dashboard';
     let editGradeId = null;
-    let currentDeleteId = null;
     
     // Periode State
     let activeTahun = '';
@@ -660,6 +660,8 @@
       pPeriode: document.getElementById('prev-periode'),
     };
 
+    let currentDeleteId = null;
+
     // --- INIT ---
     function init() {
       // Setup Datalist
@@ -677,17 +679,17 @@
       el.fMapel.innerHTML = subOpts;
       el.fGuru.innerHTML = guruOpts;
 
-      // Cek apakah API Key Firebase yang sesungguhnya sudah dimasukkan
-      if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "ISI_API_KEY_FIREBASE_ANDA" || firebaseConfig.apiKey === "API_KEY_ANDA") {
+      // Cek apakah API Key Firebase sudah dimasukkan (Peringatan UI)
+      if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "API_KEY_ANDA" || firebaseConfig.apiKey === "ISI_API_KEY_FIREBASE_ANDA") {
         el.loginErr.classList.remove('hidden');
-        el.loginErr.classList.replace('flex', 'flex'); // Ensure it acts as a flexbox 
-        el.loginErrTxt.innerHTML = "<b>Database Cloud Belum Dikonfigurasi!</b><br>Agar data tersimpan & sinkron antar perangkat saat di-host di GitHub, buka file <code>index.html</code> ini dan masukkan konfigurasi Firebase Anda di baris konfigurasi.";
+        el.loginErr.classList.add('flex');
+        el.loginErrTxt.innerHTML = `<b>Database Cloud Belum Dikonfigurasi!</b><br>Agar data tersimpan & sinkron antar perangkat saat di-host di GitHub, buka file <code>index.html</code> ini dan masukkan konfigurasi Firebase Anda di baris konfigurasi.<br><a href="https://console.firebase.google.com/" target="_blank" class="underline text-blue-600">Buka Firebase</a>`;
         el.btnLoginSubmit.disabled = true;
         el.btnLoginSubmit.classList.add('opacity-50', 'cursor-not-allowed');
-        return; // Menghentikan inisialisasi aplikasi sepenuhnya jika konfigurasi tidak valid
+        return; 
       }
 
-      // Firebase Auth dengan konfigurasi asli
+      // Firebase Auth
       const doAuth = async () => {
         try {
           if (initialToken) await signInWithCustomToken(auth, initialToken);
@@ -695,7 +697,10 @@
         } catch (e) { 
           console.error("Auth Err", e);
           el.loginErr.classList.remove('hidden');
-          el.loginErrTxt.innerHTML = "<b>Kesalahan Otentikasi Database:</b><br>" + e.message;
+          el.loginErr.classList.add('flex');
+          el.loginErrTxt.innerHTML = `<b>Akses Database Ditolak!</b><br>Pesan Error: ${e.message}<br><br><b>PENTING (Jika Hosting di GitHub):</b><br>1. Buka <a href="https://console.firebase.google.com/" target="_blank" class="underline text-blue-600">Firebase Console</a><br>2. Masuk ke menu <b>Authentication</b> > <b>Sign-in method</b> > Aktifkan <b>Anonymous</b>.<br>3. Masuk ke <b>Settings</b> > <b>Authorized domains</b> > Tambahkan domain github anda (misal: <code>namaanda.github.io</code>).`;
+          el.btnLoginSubmit.disabled = true;
+          el.btnLoginSubmit.classList.add('opacity-50', 'cursor-not-allowed');
         }
       };
       doAuth();
